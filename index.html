@@ -15,29 +15,53 @@
 
 <div id='map'></div>
 <script>
+// To do:
+// Remove unnecessary properties from GeoJSON to make it faster
+// If we use firefly icon, have to credit <div>Icons made by <a href="https://www.flaticon.com/authors/freepik" title="Firefly">Firefly</a> from <a href="https://www.flaticon.com/"     title="Flaticon">www.flaticon.com</a> is licensed by <a href="http://creativecommons.org/licenses/by/3.0/"     title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div>
 mapboxgl.accessToken = 'pk.eyJ1IjoibWFzc2F1ZHVib24iLCJhIjoiY2ptMHhzcXk1MmhydTNrcDR5MW5lYmhzYSJ9.ONas8WZilSlLJgeIEFvjBQ';
+
+// Set bounds to North America (vaguely)
+var bounds = [
+    [-142.91015625, 11.350796722383672], // Southwest coordinates
+    [-55.1953125, 62.75472592723178]  // Northeast coordinates
+];
+
+
 var map = new mapboxgl.Map({
     container: 'map', // container id
     style: 'mapbox://styles/massaudubon/cjm2btaah02kr2srmqqgs2v62', // stylesheet location
     center: [-95.577592, 40.151742], // starting position [lng, lat]
-    zoom: 4.48 // starting zoom
+    zoom: 4.48, // starting zoom
+    maxBounds: bounds
 });
 
  map.on('click', 'fireflies-full-circles', function (e) {
-        var coordinates = e.features[0].geometry.coordinates.slice();
-        var wind = e.features[0].properties.Wind;
+    var coordinates = e.features[0].geometry.coordinates.slice();
+    var wind = e.features[0].properties.wind;
+    var cloudCover = e.features[0].properties.cloudCover;
+    var habitatType = e.features[0].properties.habitatType;
+    var precipitation = e.features[0].properties.precipitation;
+    var dateOfObservation = e.features[0].properties.dateOfObservation;
+    var observationStartTime = e.features[0].properties.observationStartTime;
+    var temperature = e.features[0].properties.temperature;
 
-        // Ensure that if the map is zoomed out such that multiple
-        // copies of the feature are visible, the popup appears
-        // over the copy being pointed to.
-        while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-            coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-        }
+    // Ensure that if the map is zoomed out such that multiple
+    // copies of the feature are visible, the popup appears
+    // over the copy being pointed to.
+    while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+        coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+    }
 
-        new mapboxgl.Popup()
-            .setLngLat(coordinates)
-            .setHTML(wind)
-            .addTo(map);
+    new mapboxgl.Popup()
+        .setLngLat(coordinates)
+        .setHTML(`Date of Observation: ${dateOfObservation} <br>
+        Start Time of Observation: ${observationStartTime} <br>
+        Wind: ${wind} <br> 
+        Cloud Cover: ${cloudCover} <br>
+        Temperature: ${temperature} <br>
+        Precipitation: ${precipitation} <br>
+        Habitat Type: ${habitatType} <br>`)
+        .addTo(map);
     });
 
     // Change the cursor to a pointer when the mouse is over the places layer.
