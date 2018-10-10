@@ -4,21 +4,42 @@
     <meta charset='utf-8' />
     <title>Mass Audobon Firefly Watch</title>
     <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
-    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.44.1/mapbox-gl.js'></script>
-    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.44.1/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v0.49.0/mapbox-gl.js'></script>
+    <script src="https://d3js.org/d3-collection.v1.min.js"></script>
+    <script src="https://d3js.org/d3-dispatch.v1.min.js"></script>
+    <script src="https://d3js.org/d3-dsv.v1.min.js"></script>
+    <script src="https://d3js.org/d3-queue.v3.min.js"></script>
+    <script src="https://d3js.org/d3-request.v1.min.js"></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v0.49.0/mapbox-gl.css' rel='stylesheet' />
     <style>
         body { margin:0; padding:0; }
         #map { position:absolute; top:0; bottom:0; width:100%; }
+        #console {
+          position: absolute;
+          width: 240px;
+          margin: 10px;
+          padding: 10px 20px;
+          background-color: white;
+        }
+          .session {
+        margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
 
 <div id='map'></div>
+<div id='console'>
+  <div class='session' id='sliderbar'>
+    <h2>Month: <label id='active-month'>March</label></h2>
+    <input id='slider' class='row' type='range' min='1' max='12' step='1' value='3' />
+  </div>
+</div>
 <script>
 // To do:
 // Remove unnecessary properties from GeoJSON to make it faster
 // If we use firefly icon, have to credit <div>Icons made by <a href="https://www.flaticon.com/authors/freepik" title="Firefly">Firefly</a> from <a href="https://www.flaticon.com/"     title="Flaticon">www.flaticon.com</a> is licensed by <a href="http://creativecommons.org/licenses/by/3.0/"     title="Creative Commons BY 3.0" target="_blank">CC 3.0 BY</a></div>
-mapboxgl.accessToken = 'pk.eyJ1IjoibWFzc2F1ZHVib24iLCJhIjoiY2ptMHhzcXk1MmhydTNrcDR5MW5lYmhzYSJ9.ONas8WZilSlLJgeIEFvjBQ';
+mapboxgl.accessToken = 'pk.eyJ1Ijoic2FtZiIsImEiOiJjaWZ3bGhtdjgzMnN1dWdrcnEwZTVieG91In0.DkCY-91coDahKvpH7Z26dw';
 
 // Set bounds to North America (vaguely)
 var bounds = [
@@ -26,53 +47,172 @@ var bounds = [
     [-55.1953125, 62.75472592723178]  // Northeast coordinates
 ];
 
+var monthNames = ["January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
 
 var map = new mapboxgl.Map({
     container: 'map', // container id
-    style: 'mapbox://styles/massaudubon/cjm2btaah02kr2srmqqgs2v62', // stylesheet location
+    style: 'mapbox://styles/samf/cjmnkrcce1bj52rn74jk79lcx', // stylesheet location
     center: [-95.577592, 40.151742], // starting position [lng, lat]
-    zoom: 4.48, // starting zoom
+    zoom: 3, // starting zoom
     maxBounds: bounds
 });
 
- map.on('click', 'fireflies-full-circles', function (e) {
-    var coordinates = e.features[0].geometry.coordinates.slice();
-    var wind = e.features[0].properties.wind;
-    var cloudCover = e.features[0].properties.cloudCover;
-    var habitatType = e.features[0].properties.habitatType;
-    var precipitation = e.features[0].properties.precipitation;
-    var dateOfObservation = e.features[0].properties.dateOfObservation;
-    var observationStartTime = e.features[0].properties.observationStartTime;
-    var temperature = e.features[0].properties.temperature;
+var hoveredStateId =  null;
 
-    // Ensure that if the map is zoomed out such that multiple
-    // copies of the feature are visible, the popup appears
-    // over the copy being pointed to.
-    while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-        coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-    }
+var average = (array) => array.reduce((a, b) => parseInt(a) + parseInt(b)) / array.length;
+var getAverage = (data, callback) => {
+  console.log('getting averages...')
+  data.features.forEach((f) => {
+    var prop1 = f.properties['Number of flashing fireflies - Entry 1'] === 'None' ? '0-0' : f.properties['Number of flashing fireflies - Entry 1'];
+    var prop2 = f.properties['Number of flashing fireflies - Entry 2'] === 'None' ? '0-0' : f.properties['Number of flashing fireflies - Entry 2'];
+    var prop3 = f.properties['Number of flashing fireflies - Entry 3'] === 'None' ? '0-0' : f.properties['Number of flashing fireflies - Entry 3'];
 
-    new mapboxgl.Popup()
-        .setLngLat(coordinates)
-        .setHTML(`Date of Observation: ${dateOfObservation} <br>
-        Start Time of Observation: ${observationStartTime} <br>
-        Wind: ${wind} <br> 
-        Cloud Cover: ${cloudCover} <br>
-        Temperature: ${temperature} <br>
-        Precipitation: ${precipitation} <br>
-        Habitat Type: ${habitatType} <br>`)
-        .addTo(map);
+    var obs1 = prop1 != "More than 25" ? prop1.split('-') : [25];
+    var obs2 = prop2 != "More than 25" ? prop2.split('-') : [25];
+    var obs3 = prop3 != "More than 25" ? prop3.split('-') : [25];
+
+    var newobsaverage = (average(obs1) + average(obs2) + average(obs3)) / 3;
+    f.properties['averageObservation'] = newobsaverage;
+    f.properties['month'] = new Date(f.properties['Date of Observation']).getMonth() + 1;
+  });
+
+  callback(null, data);
+};
+
+map.on('load', () => {
+  d3.request('https://cors-anywhere.herokuapp.com/https://www.massaudubon.org/get-involved/citizen-science/firefly-watch/report/scripts/getObservationsGeoJSON.php')
+    .mimeType("application/json")
+    .header('X-Requested-With', 'XMLHttpRequest')
+    .response((xhr) => { return JSON.parse(xhr.responseText); })
+    .get((data) => {
+      d3.queue()
+        .defer(getAverage, data)
+        .await((error, geojson) => {
+          console.log('done getting averages...')
+          if (error) throw error;
+          map.addSource('firefly', {
+            type: 'geojson',
+            data: geojson,
+            generateId: true
+          });
+
+
+          map.addLayer({
+            id: 'firefly-blur',
+            source: 'firefly',
+            type: 'circle',
+            paint: {
+              'circle-color': ["case",
+                 ["boolean", ["feature-state", "hover"], false],
+                 'rgba(0, 203, 178, 0.8)',
+                 'rgba(141, 227, 18, 0.3)'
+               ],
+              'circle-radius': ['get', 'averageObservation'],
+              'circle-blur': 1
+            },
+            filter: ['==', ['get', 'month'], 3]
+          })
+        });
+
+
+        map.addLayer({
+          id: 'firefly-points',
+          source: 'firefly',
+          type: 'circle',
+          paint: {
+            'circle-color': 'rgb(221, 255, 173)',
+            'circle-radius': 1
+          },
+          filter: ['==', ['get', 'month'], 3]
+        })
     });
 
-    // Change the cursor to a pointer when the mouse is over the places layer.
-    map.on('mouseenter', 'fireflies-full-circles', function () {
-        map.getCanvas().style.cursor = 'pointer';
-    });
 
-    // Change it back to a pointer when it leaves.
-    map.on('mouseleave', 'fireflies-full-circles', function () {
+
+  map.on('click', 'firefly-blur', function (e) {
+
+    //     locationID: 11,
+    // observationID: 13,
+    // Fireflies Seen: true,
+    // Date of Observation: "2018-05-29",
+    // Habitat Type: "Open Field",
+    // Habitat Mowing: "No",
+    // Temperature (F): 70,
+    // Precipitation: "None",
+    // Wind: "None",
+    // Cloud Cover: "Clear Night",
+    // Artificial light source: "Visible but far from habitat",
+    // Observation Start Time: "21:00:00",
+    // Number of flashing fireflies - Entry 1: "11-25",
+    // Number of flashing fireflies - Entry 2: "11-25",
+    // Number of flashing fireflies - Entry 3: "11-25",
+    // Number of flashing patterns: "Not sure",
+    // Most common flash pattern: "Not sure",
+    // Observation End Time: "21:01:00"
+     var coordinates = e.features[0].geometry.coordinates.slice();
+     var wind = e.features[0].properties['Wind'];
+     var cloudCover = e.features[0].properties['Cloud Cover'];
+     var habitatType = e.features[0].properties['Habitat Type'];
+     var precipitation = e.features[0].properties['Precipitation'];
+     var dateOfObservation = e.features[0].properties['Date of Observation'];
+     var observationStartTime = e.features[0].properties['Observation Start Time'];
+     var temperature = e.features[0].properties['Temperature (F)'];
+
+     // Ensure that if the map is zoomed out such that multiple
+     // copies of the feature are visible, the popup appears
+     // over the copy being pointed to.
+     while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+         coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+     }
+
+     new mapboxgl.Popup()
+         .setLngLat(coordinates)
+         .setHTML(`Date of Observation: ${dateOfObservation} <br>
+         Start Time of Observation: ${observationStartTime} <br>
+         Wind: ${wind} <br>
+         Cloud Cover: ${cloudCover} <br>
+         Temperature: ${temperature} F<br>
+         Precipitation: ${precipitation} <br>
+         Habitat Type: ${habitatType} <br>`)
+         .addTo(map);
+     });
+
+     map.on("mousemove", "firefly-blur", function(e) {
+           map.getCanvas().style.cursor = 'pointer';
+           if (e.features.length > 0) {
+               if (hoveredStateId) {
+                   map.setFeatureState({source: 'firefly', id: hoveredStateId}, { hover: false});
+               }
+               hoveredStateId = e.features[0].id;
+               map.setFeatureState({source: 'firefly', id: hoveredStateId}, { hover: true});
+           }
+       });
+
+   map.on("mouseleave", "firefly-blur", function() {
         map.getCanvas().style.cursor = '';
-    });
+       if (hoveredStateId) {
+           map.setFeatureState({source: 'firefly', id: hoveredStateId}, { hover: false});
+       }
+       hoveredStateId =  null;
+   });
+
+     // allow for the scrolling slidebar to work
+ 		document.getElementById('slider').addEventListener('input', function(e) {
+ 			var month = parseInt(e.target.value);
+ 			// update the map based on slider
+       // need to do some string "cutting" on the date to get the month
+ 			map.setFilter('firefly-blur', ['==', ['get', 'month'], month]);
+      map.setFilter('firefly-points', ['==', ['get', 'month'], month]);
+
+ 			// update UI
+ 			document.getElementById('active-month').innerText = monthNames[month - 1];
+ 		});
+
+})
+
+
 </script>
 
 </body>
